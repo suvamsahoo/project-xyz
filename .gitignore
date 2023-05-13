@@ -1,0 +1,26 @@
+# Node.js
+node_modules/
+npm-debug.log
+
+package-lock.json
+
+# Environment variables
+.env
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+/build/
+/dist/
+/out/
+
+# Logs
+*.log
+logs/
+log/
