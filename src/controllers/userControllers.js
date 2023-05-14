@@ -26,8 +26,8 @@ export let getAllUsers = async (req, res) => {
 
 export let createUserByMail = async (req, res) => {
   try {
-    const { name, email, phone, password } = req?.body;
-    if (!name || !email || !password || !phone) {
+    const { name, email, phone, password, userName } = req?.body;
+    if (!name || !email || !password || !phone || !userName) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
@@ -129,8 +129,8 @@ export let verifyUserByMail = async (req, res) => {
     if (!otpDoc) {
       return res.status(400).json({ error: "Invalid OTP" });
     } else {
-      const { name, email, phone, password } = otpDoc;
-      const newUser = new Proj_User({ name, email, phone, password });
+      const { name, email, phone, password, userName } = otpDoc;
+      const newUser = new Proj_User({ name, email, phone, password, userName });
       const savedUser = await newUser.save();
       savedUser
         ? res.status(201).json({ message: "User created successfully" })

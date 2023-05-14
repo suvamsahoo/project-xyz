@@ -6,6 +6,9 @@ const Proj_CheckOtpMail_ModelSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    userName: {
+      type: String,
+    },
     phone: {
       type: Number,
       required: true,
