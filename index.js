@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
 import { connectDB } from "./src/config/db.js";
+import userRoutes from "./src/routes/userRoutes.js";
 let app = express();
 
 app.use(bodyParser.json());
@@ -15,6 +16,8 @@ connectDB(process.env.DB_URI);
 app.get("/", (req, res) => {
   res.send("Hello 14-05-2023");
 });
+
+app.use("/api/users", userRoutes);
 
 // Add error handling middleware to handle errors that may occur during request processing:-
 app.use((err, req, res, next) => {
