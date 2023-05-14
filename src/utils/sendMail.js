@@ -24,6 +24,6 @@ export const sendMail = async (mailBody) => {
     const info = await transporter?.sendMail(mailOptions);
     return info.messageId;
   } catch (error) {
-    return error;
+    throw new Error("Send mail failed.");
   }
 };

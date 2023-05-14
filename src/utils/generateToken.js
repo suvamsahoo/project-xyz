@@ -7,6 +7,6 @@ export let generateToken = async (payload, expiresTime) => {
     });
     return token;
   } catch (error) {
-    throw error;
+    throw new Error("Token generation failed.");
   }
 };

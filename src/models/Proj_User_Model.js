@@ -30,6 +30,9 @@ const Proj_User_ModelSchema = new mongoose.Schema(
     resetPasswordToken: {
       type: String,
     },
+    resetPasswordIv: {
+      type: String,
+    },
     resetPasswordExpires: {
       type: Date,
     },

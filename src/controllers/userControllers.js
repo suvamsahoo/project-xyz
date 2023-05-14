@@ -1,9 +1,11 @@
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 import Proj_CheckOtpMail from "../models/Proj_CheckOtpMail_Model.js";
 import Proj_User from "../models/Proj_User_Model.js";
 import { generateOTP } from "../utils/generateOTP.js";
 import { sendMail } from "../utils/sendMail.js";
 import { generateToken } from "../utils/generateToken.js";
+import { decryptData, encryptData } from "../utils/encryptAndDecryptData.js";
 
 export let getAllUsers = async (req, res) => {
   try {
@@ -247,12 +249,134 @@ export let deleteUserById = async (req, res) => {
       return res.status(200).json({ message: "User deleted successfully" });
     }
   } catch (err) {
-    res
-      .status(500)
-      .json({
-        message: "Server error",
-        controllerPath: "deleteUserById",
-        error: err,
-      });
+    res.status(500).json({
+      message: "Server error",
+      controllerPath: "deleteUserById",
+      error: err,
+    });
+  }
+};
+
+export let forgotPasswordByMail = async (req, res) => {
+  try {
+    const { email } = req?.body;
+
+    const user = await Proj_User.findOne({
+      email: { $regex: new RegExp(`^${email}$`, "i") },
+    });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ message: "User with provided email not found" });
+    }
+
+    const payload = {
+      userId: user?._id,
+      email: user?.email,
+    };
+
+    const expiresTime = Date.now() + 5 * 60 * 1000; //five Minutes From Now
+    const hashedToken = await generateToken(payload, expiresTime);
+    if (hashedToken) {
+      const { iv, encryptedData } = encryptData(hashedToken);
+
+      user.resetPasswordToken = encryptedData;
+      user.resetPasswordIv = iv;
+      user.resetPasswordExpires = expiresTime;
+      await user.save();
+
+      let mailBody = {
+        emailTo: email,
+        subject: `Password Reset Request`,
+        htmlBody: `<p>You are receiving this email because you (or someone else) has requested a password reset for your account.</p>
+        <p>Click on the following link, or paste this into your browser to complete the process:</p>
+        <a href="${process.env.FRONTEND_URL}/reset_password-mail/${encryptedData}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: #fff; text-decoration: none;">Reset Password</a>
+        <p>If you did not request this, please ignore this email and your password will remain unchanged.</p>`,
+      };
+      sendMail(mailBody)
+        .then((result) => {
+          if (typeof result === "object") {
+            res.status(500).json({
+              message: "Not able to send mail, try again after some time",
+            });
+          } else {
+            res.status(200).json({
+              message:
+                "Password reset email sent successfully, five Minutes From Now do fast",
+              mailId: result,
+            });
+          }
+        })
+        .catch((error) => {
+          res.status(500).json({ message: "Not able to send mail" });
+        });
+    } else {
+      throw new Error("Failed to generate hashed token");
+    }
+  } catch (err) {
+    res.status(500).json({
+      message: "Internal server error",
+      controllerPath: "forgotPassword",
+      error: err,
+    });
+  }
+};
+
+export let resetPasswordByMail = async (req, res) => {
+  try {
+    const { token } = req?.params;
+    const { password, confirmPassword } = req?.body;
+
+    if (password !== confirmPassword) {
+      return res
+        .status(404)
+        .json({ message: "password and confirmPassword are not matched" });
+    }
+
+    const user = await Proj_User.findOne({ resetPasswordToken: token });
+    if (!user) {
+      return res.status(404).json({ message: "Invalid reset token" });
+    }
+
+    const now = Date.now();
+    if (now > user?.resetPasswordExpires) {
+      return res.status(404).json({ message: "Expired reset token" });
+    }
+
+    let tokenBody = {
+      iv: user?.resetPasswordIv,
+      encryptedData: token,
+    };
+    const decryptedToken = decryptData(tokenBody);
+
+    decryptedToken &&
+      jwt.verify(
+        decryptedToken,
+        process.env.JWT_SECRET,
+        async (err, decoded) => {
+          if (err) {
+            return res.status(404).json({ message: "Error in reset token" });
+          } else {
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(password, salt);
+
+            user.password = hashedPassword;
+            user.resetPasswordToken = null;
+            user.resetPasswordIv = null;
+            user.resetPasswordExpires = null;
+            await user.save();
+
+            res
+              .status(200)
+              .json({ message: "Password reset successfully", user: decoded });
+          }
+        }
+      );
+  } catch (err) {
+    res.status(500).json({
+      message: "Internal server error",
+      controllerPath: "resetPassword",
+      error: err,
+    });
   }
 };
