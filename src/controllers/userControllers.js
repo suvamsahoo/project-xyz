@@ -3,6 +3,7 @@ import Proj_CheckOtpMail from "../models/Proj_CheckOtpMail_Model.js";
 import Proj_User from "../models/Proj_User_Model.js";
 import { generateOTP } from "../utils/generateOTP.js";
 import { sendMail } from "../utils/sendMail.js";
+import { generateToken } from "../utils/generateToken.js";
 
 export let getAllUsers = async (req, res) => {
   try {
@@ -28,7 +29,9 @@ export let createUserByMail = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const checkOtpUsers = await Proj_CheckOtpMail.find({ email });
+    const checkOtpUsers = await Proj_CheckOtpMail.find({
+      email: { $regex: new RegExp(`^${email}$`, "i") },
+    });
     if (checkOtpUsers?.length >= 5) {
       return res.status(201).json({
         message:
@@ -36,7 +39,9 @@ export let createUserByMail = async (req, res) => {
       });
     }
 
-    const user = await Proj_User.findOne({ email });
+    const user = await Proj_User.findOne({
+      email: { $regex: new RegExp(`^${email}$`, "i") },
+    });
     if (user) {
       return res
         .status(401)
@@ -106,14 +111,19 @@ export let verifyUserByMail = async (req, res) => {
         .json({ message: "Missing email or otp, required fields" });
     }
 
-    const user = await Proj_User.findOne({ email });
+    const user = await Proj_User.findOne({
+      email: { $regex: new RegExp(`^${email}$`, "i") },
+    });
     if (user) {
       return res.status(401).json({
         message: "User is already created in this email ID, do login",
       });
     }
 
-    const otpDoc = await Proj_CheckOtpMail.findOne({ email, otp });
+    const otpDoc = await Proj_CheckOtpMail.findOne({
+      email: { $regex: new RegExp(`^${email}$`, "i") },
+      otp,
+    });
     if (!otpDoc) {
       return res.status(400).json({ error: "Invalid OTP" });
     } else {
@@ -128,13 +138,121 @@ export let verifyUserByMail = async (req, res) => {
     if (err?.message?.includes("duplicate")) {
       res.status(400).json({ message: "Email address already exists" });
     } else {
-      res
-        .status(500)
-        .json({
-          message: "Server error",
-          controllerPath: "signupUser",
-          error: err,
-        });
+      res.status(500).json({
+        message: "Server error",
+        controllerPath: "signupUser",
+        error: err,
+      });
     }
+  }
+};
+
+export let signinUser = async (req, res) => {
+  try {
+    const { email, password } = req?.body;
+    if (!email || !password) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const user = await Proj_User.findOne({
+      email: { $regex: new RegExp(`^${email}$`, "i") },
+    });
+    if (!user) {
+      return res
+        .status(401)
+        .json({ message: "User not found in this email ID" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user?.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+
+    const payload = {
+      name: user?.name,
+      userId: user?._id,
+      email: user?.email,
+      phone: user?.phone,
+      isAdmin: user?.isAdmin,
+      isSuperAdmin: user?.isSuperAdmin,
+    };
+    const expiresTime = "1h";
+    const token = await generateToken(payload, expiresTime);
+
+    res.status(200).json({
+      user: payload,
+      token,
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Server error",
+      controllerPath: "signinUser",
+      error: err,
+    });
+  }
+};
+
+export let getUserById = async (req, res) => {
+  try {
+    const { userId } = req?.params;
+    const user = await Proj_User.findById(userId).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    user && res.status(200).json(user);
+  } catch (err) {
+    res.status(500).json({
+      message: "Server error",
+      controllerPath: "getUserById",
+      error: err,
+    });
+  }
+};
+
+export let updateUserById = async (req, res) => {
+  const { userId } = req?.params;
+  const { name } = req?.body;
+
+  try {
+    const user = await Proj_User.findByIdAndUpdate(
+      userId,
+      { name },
+      { new: true }
+    );
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Omit password field from the response
+    const updatedUser = user?.toObject();
+    delete updatedUser?.password;
+
+    return res.status(200).json(updatedUser);
+  } catch (err) {
+    return res.status(500).json({
+      message: "Server error",
+      controllerPath: "updateUserById",
+      error: err,
+    });
+  }
+};
+
+export let deleteUserById = async (req, res) => {
+  try {
+    const { userId } = req?.params;
+    const deletedUser = await Proj_User.findByIdAndDelete(userId);
+    if (!deletedUser) {
+      return res.status(404).json({ message: "User not found" });
+    } else {
+      return res.status(200).json({ message: "User deleted successfully" });
+    }
+  } catch (err) {
+    res
+      .status(500)
+      .json({
+        message: "Server error",
+        controllerPath: "deleteUserById",
+        error: err,
+      });
   }
 };
